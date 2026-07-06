@@ -1,0 +1,374 @@
+import React, { useState, useEffect } from "react";
+import { 
+  GraduationCap, 
+  BookOpen, 
+  Sparkles, 
+  MessageSquare, 
+  BookMarked, 
+  Flame, 
+  Award,
+  Menu,
+  X,
+  User,
+  LayoutDashboard
+} from "lucide-react";
+import Dashboard from "./components/Dashboard";
+import GrammarChecker from "./components/GrammarChecker";
+import LessonInterface from "./components/LessonInterface";
+import SpeakingPartner from "./components/SpeakingPartner";
+import VocabularyBook from "./components/VocabularyBook";
+import { LearnerProgress, SavedWord } from "./types";
+import { motion, AnimatePresence } from "motion/react";
+
+export default function App() {
+  const [activeSection, setActiveSection] = useState<"dashboard" | "learn" | "grammar" | "speaking" | "vocab">("dashboard");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Global Learner Progress state
+  const [progress, setProgress] = useState<LearnerProgress>(() => {
+    const saved = localStorage.getItem("fluentpath_progress");
+    if (saved) return JSON.parse(saved);
+    return {
+      lessonsCompleted: 0,
+      xp: 0,
+      streak: 3, // Start with a nice active streak for encouragement!
+      lastActiveDate: new Date().toISOString().split("T")[0],
+      savedWordsCount: 0,
+      weeklyHistory: [],
+    };
+  });
+
+  // Global Saved Vocabulary list
+  const [savedWords, setSavedWords] = useState<SavedWord[]>(() => {
+    const saved = localStorage.getItem("fluentpath_saved_words");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Keep localStorage in sync with state changes
+  useEffect(() => {
+    localStorage.setItem("fluentpath_progress", JSON.stringify(progress));
+  }, [progress]);
+
+  useEffect(() => {
+    localStorage.setItem("fluentpath_saved_words", JSON.stringify(savedWords));
+  }, [savedWords]);
+
+  // Toast notification for saved words
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const triggerToast = (message: string) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const addXp = (amount: number) => {
+    setProgress((prev) => ({
+      ...prev,
+      xp: prev.xp + amount,
+    }));
+    triggerToast(`+${amount} XP Earned! 🏆`);
+  };
+
+  const incrementLessonsCompleted = () => {
+    setProgress((prev) => ({
+      ...prev,
+      lessonsCompleted: prev.lessonsCompleted + 1,
+    }));
+  };
+
+  const handleSaveWord = (word: string, pos: string, definition: string, example: string) => {
+    // Check if word already exists in saved list
+    const exists = savedWords.some((w) => w.word.toLowerCase() === word.toLowerCase());
+    if (exists) return;
+
+    const newWord: SavedWord = {
+      id: `word-${Date.now()}`,
+      word,
+      partOfSpeech: pos,
+      definition,
+      example,
+      savedAt: new Date().toISOString(),
+      masteryLevel: 0,
+    };
+
+    setSavedWords((prev) => [newWord, ...prev]);
+    setProgress((prev) => ({
+      ...prev,
+      savedWordsCount: prev.savedWordsCount + 1,
+    }));
+    addXp(10); // +10 XP for building your vocabulary!
+    triggerToast(`"${word}" saved to Vocabulary Bank! 📚`);
+  };
+
+  const handleRemoveWord = (id: string) => {
+    const wordToRemove = savedWords.find((w) => w.id === id);
+    setSavedWords((prev) => prev.filter((w) => w.id !== id));
+    setProgress((prev) => ({
+      ...prev,
+      savedWordsCount: Math.max(0, prev.savedWordsCount - 1),
+    }));
+    if (wordToRemove) {
+      triggerToast(`Removed "${wordToRemove.word}" from Bank`);
+    }
+  };
+
+  const handleUpdateMastery = (id: string, newLevel: number) => {
+    setSavedWords((prev) =>
+      prev.map((w) => (w.id === id ? { ...w, masteryLevel: newLevel } : w))
+    );
+  };
+
+  const handleQuickAddWord = (word: string, pos: string, def: string, ex: string) => {
+    handleSaveWord(word, pos, def, ex);
+  };
+
+  const renderActiveSection = () => {
+    switch (activeSection) {
+      case "dashboard":
+        return <Dashboard progress={progress} savedWords={savedWords} onNavigate={setActiveSection} />;
+      case "grammar":
+        return <GrammarChecker onSaveWord={handleSaveWord} savedWords={savedWords} addXp={addXp} />;
+      case "learn":
+        return (
+          <LessonInterface 
+            onSaveWord={handleSaveWord} 
+            savedWords={savedWords} 
+            addXp={addXp} 
+            incrementLessonsCompleted={incrementLessonsCompleted} 
+          />
+        );
+      case "speaking":
+        return <SpeakingPartner addXp={addXp} />;
+      case "vocab":
+        return (
+          <VocabularyBook 
+            savedWords={savedWords} 
+            onRemoveWord={handleRemoveWord} 
+            onUpdateMastery={handleUpdateMastery} 
+            addXp={addXp}
+            onQuickAddWord={handleQuickAddWord}
+          />
+        );
+      default:
+        return <Dashboard progress={progress} savedWords={savedWords} onNavigate={setActiveSection} />;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-[#0F172A] font-sans flex flex-col justify-between">
+      
+      {/* GLOBAL TOAST BANNER */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -50, scale: 0.9 }}
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 bg-[#0F172A] text-white rounded-2xl shadow-xl border border-[#E2E8F0] text-xs font-bold flex items-center gap-2"
+          >
+            <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+            <span>{toastMessage}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* HEADER NAVIGATION */}
+      <nav className="bg-white border-b border-[#E2E8F0] sticky top-0 z-40 shadow-3xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16 items-center">
+            
+            {/* Branding Logo */}
+            <div 
+              onClick={() => { setActiveSection("dashboard"); setMobileMenuOpen(false); }}
+              className="flex items-center gap-2 cursor-pointer group"
+            >
+              <div className="bg-[#4F46E5] p-2 rounded-xl group-hover:bg-[#4338CA] transition">
+                <GraduationCap className="text-white text-xl w-5 h-5" />
+              </div>
+              <span className="text-lg font-extrabold tracking-tight text-[#0F172A] uppercase font-display">
+                FluentPath <span className="text-[#4F46E5] font-black">AI</span>
+              </span>
+            </div>
+
+            {/* Desktop Menu links */}
+            <div className="hidden md:flex space-x-6 text-xs font-bold uppercase tracking-wider text-slate-500">
+              <button 
+                onClick={() => setActiveSection("dashboard")} 
+                className={`hover:text-[#4F46E5] transition flex items-center gap-1.5 py-5 border-b-2 cursor-pointer ${
+                  activeSection === "dashboard" ? "border-[#4F46E5] text-[#4F46E5]" : "border-transparent text-slate-500"
+                }`}
+              >
+                <LayoutDashboard className="w-4 h-4" /> Dashboard
+              </button>
+              <button 
+                onClick={() => setActiveSection("learn")} 
+                className={`hover:text-[#4F46E5] transition flex items-center gap-1.5 py-5 border-b-2 cursor-pointer ${
+                  activeSection === "learn" ? "border-[#4F46E5] text-[#4F46E5]" : "border-transparent text-slate-500"
+                }`}
+              >
+                <BookOpen className="w-4 h-4" /> Daily Lesson
+              </button>
+              <button 
+                onClick={() => setActiveSection("grammar")} 
+                className={`hover:text-[#4F46E5] transition flex items-center gap-1.5 py-5 border-b-2 cursor-pointer ${
+                  activeSection === "grammar" ? "border-[#4F46E5] text-[#4F46E5]" : "border-transparent text-slate-500"
+                }`}
+              >
+                <Sparkles className="w-4 h-4" /> Grammar Checker
+              </button>
+              <button 
+                onClick={() => setActiveSection("speaking")} 
+                className={`hover:text-[#4F46E5] transition flex items-center gap-1.5 py-5 border-b-2 cursor-pointer ${
+                  activeSection === "speaking" ? "border-[#4F46E5] text-[#4F46E5]" : "border-transparent text-slate-500"
+                }`}
+              >
+                <MessageSquare className="w-4 h-4" /> Speaking Partner
+              </button>
+              <button 
+                onClick={() => setActiveSection("vocab")} 
+                className={`hover:text-[#4F46E5] transition flex items-center gap-1.5 py-5 border-b-2 cursor-pointer ${
+                  activeSection === "vocab" ? "border-[#4F46E5] text-[#4F46E5]" : "border-transparent text-slate-500"
+                }`}
+              >
+                <BookMarked className="w-4 h-4" /> Vocab Bank
+              </button>
+            </div>
+
+            {/* Header Right statistics */}
+            <div className="hidden md:flex items-center gap-4">
+              {/* Streak badge */}
+              <div className="flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-100 px-3 py-1 rounded-full text-xs font-bold shadow-3xs">
+                <Flame className="w-4 h-4 text-amber-500 animate-pulse animate-duration-[1200ms]" />
+                <span>{progress.streak} Day Streak</span>
+              </div>
+
+              {/* XP display */}
+              <div className="flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-1 rounded-full text-xs font-bold shadow-3xs">
+                <Award className="w-4 h-4 text-indigo-500" />
+                <span>{progress.xp} XP</span>
+              </div>
+            </div>
+
+            {/* Mobile Hamburger menu toggle */}
+            <div className="flex md:hidden items-center gap-3">
+              {/* Quick display of streak on mobile header */}
+              <div className="flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 rounded-full text-3xs font-extrabold">
+                <Flame className="w-3.5 h-3.5 text-amber-500" />
+                <span>{progress.streak}d</span>
+              </div>
+
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="p-2 text-slate-600 hover:text-slate-950 focus:outline-none cursor-pointer"
+              >
+                {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        {/* Mobile Navigation Drawer Dropdown */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="md:hidden border-t border-[#E2E8F0] bg-white overflow-hidden"
+            >
+              <div className="px-4 pt-2 pb-4 space-y-2 text-xs font-bold uppercase tracking-wider text-slate-600">
+                <button
+                  onClick={() => { setActiveSection("dashboard"); setMobileMenuOpen(false); }}
+                  className={`w-full text-left py-2.5 px-3 rounded-lg flex items-center gap-2 cursor-pointer ${
+                    activeSection === "dashboard" ? "bg-indigo-50 text-[#4F46E5]" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <LayoutDashboard className="w-4 h-4" /> Dashboard
+                </button>
+                <button
+                  onClick={() => { setActiveSection("learn"); setMobileMenuOpen(false); }}
+                  className={`w-full text-left py-2.5 px-3 rounded-lg flex items-center gap-2 cursor-pointer ${
+                    activeSection === "learn" ? "bg-indigo-50 text-[#4F46E5]" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <BookOpen className="w-4 h-4" /> Daily Lesson
+                </button>
+                <button
+                  onClick={() => { setActiveSection("grammar"); setMobileMenuOpen(false); }}
+                  className={`w-full text-left py-2.5 px-3 rounded-lg flex items-center gap-2 cursor-pointer ${
+                    activeSection === "grammar" ? "bg-indigo-50 text-[#4F46E5]" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <Sparkles className="w-4 h-4" /> Grammar Checker
+                </button>
+                <button
+                  onClick={() => { setActiveSection("speaking"); setMobileMenuOpen(false); }}
+                  className={`w-full text-left py-2.5 px-3 rounded-lg flex items-center gap-2 cursor-pointer ${
+                    activeSection === "speaking" ? "bg-indigo-50 text-[#4F46E5]" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <MessageSquare className="w-4 h-4" /> Speaking Partner
+                </button>
+                <button
+                  onClick={() => { setActiveSection("vocab"); setMobileMenuOpen(false); }}
+                  className={`w-full text-left py-2.5 px-3 rounded-lg flex items-center gap-2 cursor-pointer ${
+                    activeSection === "vocab" ? "bg-indigo-50 text-[#4F46E5]" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <BookMarked className="w-4 h-4" /> Vocab Bank
+                </button>
+
+                {/* Mobile indicators */}
+                <div className="pt-3 border-t border-[#E2E8F0] flex justify-around text-xs font-bold text-slate-800">
+                  <div className="text-center">
+                    <span className="text-amber-600 block">{progress.streak} Days</span>
+                    <span className="text-4xs text-slate-400 font-semibold uppercase tracking-widest">Active Streak</span>
+                  </div>
+                  <div className="text-center">
+                    <span className="text-indigo-600 block">{progress.xp} XP</span>
+                    <span className="text-4xs text-slate-400 font-semibold uppercase tracking-widest">Points</span>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </nav>
+
+      {/* MAIN VIEWPORT BODY */}
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 md:py-10">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeSection}
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -15 }}
+            transition={{ duration: 0.15 }}
+          >
+            {renderActiveSection()}
+          </motion.div>
+        </AnimatePresence>
+      </main>
+
+      {/* FOOTER */}
+      <footer className="bg-white border-t border-[#E2E8F0] py-6 text-center text-slate-400 text-xs mt-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-1.5 font-medium">
+          <p>© {new Date().getFullYear()} FluentPath AI. Designed to maximize active conversational output and vocabulary memory retention.</p>
+          <p className="text-slate-300 font-semibold">Powered by advanced Google Gemini models on the server side.</p>
+        </div>
+      </footer>
+
+    </div>
+  );
+}
+<div align="center">
+
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+
+  <h1>Built with AI Studio</h2>
+
+  <p>The fastest path from prompt to production with Gemini.</p>
+
+  <a href="https://aistudio.google.com/apps">Start building</a>
+
+</div>
